@@ -149,3 +149,22 @@ target_compile_options(lgtv-cli PRIVATE -Wall -Wextra -Wno-unused-parameter)
 set_target_properties(lgtv-cli PROPERTIES OUTPUT_NAME lgtvcli)
 
 install(TARGETS lgtv-cli RUNTIME DESTINATION bin)
+
+# --------------------------------------------------------------------- gui ---
+
+if(BUILD_GUI)
+    find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+    qt_standard_project_setup()
+
+    qt_add_executable(lgtv-gui
+        src/gui/main.cpp
+        src/gui/main_window.cpp
+        src/gui/device_dialog.cpp
+    )
+
+    target_link_libraries(lgtv-gui PRIVATE lgtv-common Qt6::Widgets)
+    target_compile_options(lgtv-gui PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    set_target_properties(lgtv-gui PROPERTIES OUTPUT_NAME lgtv-companion)
+
+    install(TARGETS lgtv-gui RUNTIME DESTINATION bin)
+endif()
