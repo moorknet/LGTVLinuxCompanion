@@ -19,10 +19,14 @@ Qt user interface are still being built.
 
 | Component | State |
 |---|---|
-| Portable core (device model, webOS API, config, logging, IPC) | ✅ Ported, builds clean, smoke tested |
-| Background daemon (logind power events, WOL, Wayland idle) | 🚧 In progress |
-| Command line interface | ⏳ Planned |
-| Qt user interface | ⏳ Planned |
+| Portable core (device model, webOS API, config, logging, IPC) | ✅ Ported, smoke tested |
+| Background daemon (logind power events, WOL, Wayland idle) | ✅ Verified against an LG C1 |
+| Command line interface (`lgtvcli`) | ✅ Verified against an LG C1 |
+| Qt user interface — main window, device and settings dialogs | ✅ Working |
+| Qt user interface — network scan, idle/topology dialogs | ⏳ Not yet |
+
+Verified end to end on KDE Plasma (Wayland) against an LG C1: pairing, power
+off over TLS, and wake-on-LAN bringing the display back in under five seconds.
 
 ## Differences from the Windows original
 

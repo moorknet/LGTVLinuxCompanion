@@ -160,6 +160,7 @@ if(BUILD_GUI)
         src/gui/main.cpp
         src/gui/main_window.cpp
         src/gui/device_dialog.cpp
+        src/gui/options_dialog.cpp
     )
 
     target_link_libraries(lgtv-gui PRIVATE lgtv-common Qt6::Widgets)

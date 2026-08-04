@@ -6,6 +6,7 @@
 
 #include "main_window.h"
 #include "device_dialog.h"
+#include "options_dialog.h"
 #include "app_define.h"
 #include "ipc.h"
 #include "paths.h"
@@ -225,8 +226,12 @@ void MainWindow::onTestDevice(void)
 }
 void MainWindow::onSettings(void)
 {
-	QMessageBox::information(this, tr("Settings"),
-		tr("The global settings dialog is not implemented yet."));
+	OptionsDialog dialog(prefs_, this);
+	if (dialog.exec() == QDialog::Accepted)
+	{
+		dialog.applyTo(prefs_);
+		setDirty(true);
+	}
 }
 void MainWindow::onApply(void)
 {
