@@ -1238,7 +1238,9 @@ bool WebOsClient::Impl::setSessionKey(std::string Key, std::string deviceid)
 {
 	if (Key.size() > 0 && deviceid.size() > 0)
 	{
-		std::string path = paths::configFile();
+		std::string path = device_settings_.extra.config_file.empty()
+			? paths::configFile()
+			: device_settings_.extra.config_file;
 		nlohmann::json jsonPrefs;
 
 		//thread safe

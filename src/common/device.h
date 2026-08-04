@@ -26,6 +26,10 @@ struct DeviceAdditionalConf
 	bool								user_idle_mode_mute_speakers;
 	int									log_level;
 	std::string							data_path;
+	// Full path of the configuration file in use. Needed so a pairing key is
+	// written back to the file actually loaded, which is not necessarily the
+	// XDG default when --config was given.
+	std::string							config_file;
 	int									timeout;
 };
 // Properties, configuration and default values for a webOS device

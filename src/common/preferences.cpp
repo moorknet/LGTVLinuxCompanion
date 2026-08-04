@@ -416,6 +416,7 @@ Preferences::Preferences(std::string configuration_file_name)
 						}
 					}
 					device.extra.data_path = data_path_;
+					device.extra.config_file = configuration_file_;
 					device.extra.timeout = power_on_timeout_;
 					device.extra.log_level = log_level_;
 					device.extra.user_idle_mode_mute_speakers = user_idle_mode_mute_speakers_;
