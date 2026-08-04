@@ -272,6 +272,20 @@ std::string tools::getInterfaceForIP(const std::string& ip)
 		});
 	return result;
 }
+std::string tools::getIPforInterface(const std::string& interface_name)
+{
+	std::string result;
+
+	forEachIPv4Interface([&result, &interface_name](struct ifaddrs* ifa) {
+		if (ifa->ifa_name && interface_name == ifa->ifa_name)
+		{
+			result = addrToString(ifa->ifa_addr);
+			return true;
+		}
+		return false;
+		});
+	return result;
+}
 std::string tools::getBroadcastForIP(const std::string& ip)
 {
 	std::string result;

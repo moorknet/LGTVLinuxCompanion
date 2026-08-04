@@ -30,6 +30,8 @@ namespace tools
 	std::string								getSourceIPforDestination(const std::string& destination_ip);
 	// Name of the interface owning the given local address, or "".
 	std::string								getInterfaceForIP(const std::string& ip);
+	// IPv4 address of the named interface, e.g. "enp5s0" -> "192.168.1.9", or "".
+	std::string								getIPforInterface(const std::string& interface_name);
 	// Broadcast address of the interface owning the given local address, or "".
 	std::string								getBroadcastForIP(const std::string& ip);
 }

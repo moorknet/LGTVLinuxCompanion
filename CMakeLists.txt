@@ -122,3 +122,19 @@ target_compile_options(lgtv-platform PRIVATE -Wall -Wextra -Wno-unused-parameter
 # Interactive harness: prints logind and idle events as they arrive.
 add_executable(lgtv-platform-probe src/daemon/platform_probe.cpp)
 target_link_libraries(lgtv-platform-probe PRIVATE lgtv-platform)
+
+# ------------------------------------------------------------------ daemon ---
+
+add_executable(lgtv-companion-daemon
+    src/daemon/main.cpp
+    src/daemon/companion.cpp
+    src/daemon/web_os_client.cpp
+    src/daemon/button_client.cpp
+)
+
+target_link_libraries(lgtv-companion-daemon PRIVATE lgtv-platform)
+target_compile_options(lgtv-companion-daemon PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+install(TARGETS lgtv-companion-daemon RUNTIME DESTINATION bin)
+install(FILES data/lgtv-companion.service
+    DESTINATION lib/systemd/user)

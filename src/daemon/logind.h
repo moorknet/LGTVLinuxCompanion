@@ -29,6 +29,17 @@ enum class PowerEvent
 
 std::string toString(PowerEvent event);
 
+// True when the session's screen lock / screensaver is active, via
+// org.freedesktop.ScreenSaver on the session bus. Replaces upstream's scan of
+// running processes for a ".scr" windows screensaver binary. False if the
+// interface is unavailable, which is the safe answer: it only ever suppresses
+// activity, never triggers it.
+bool isScreensaverActive(void);
+
+// The logind session id of the current session, e.g. "2". Replaces
+// WTSGetActiveConsoleSessionId(). Falls back to XDG_SESSION_ID, then "1".
+std::string currentSessionId(void);
+
 class LogindMonitor
 {
 public:

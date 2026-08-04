@@ -40,6 +40,40 @@ std::string toString(PowerEvent event)
 	return "unknown";
 }
 
+bool isScreensaverActive(void)
+{
+	sd_bus* bus = nullptr;
+	if (sd_bus_open_user(&bus) < 0)
+		return false;
+
+	sd_bus_error error = SD_BUS_ERROR_NULL;
+	sd_bus_message* reply = nullptr;
+	int active = 0;
+	// KDE, GNOME and most others implement this; a missing service just means
+	// "not locked" as far as we are concerned.
+	int r = sd_bus_call_method(bus,
+		"org.freedesktop.ScreenSaver",
+		"/org/freedesktop/ScreenSaver",
+		"org.freedesktop.ScreenSaver",
+		"GetActive", &error, &reply, "");
+	if (r >= 0 && reply)
+	{
+		sd_bus_message_read(reply, "b", &active);
+		sd_bus_message_unref(reply);
+	}
+	sd_bus_error_free(&error);
+	sd_bus_flush_close_unref(bus);
+	return active != 0;
+}
+
+std::string currentSessionId(void)
+{
+	if (const char* id = std::getenv("XDG_SESSION_ID"))
+		if (id[0] != '\0')
+			return id;
+	return "1";
+}
+
 class LogindMonitor::Impl
 {
 public:
