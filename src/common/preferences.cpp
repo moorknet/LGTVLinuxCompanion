@@ -67,6 +67,7 @@ using			json = nlohmann::json;
 #define			JSON_DEVICE_PERSISTENT			"PersistentConnectionLevel"
 #define			JSON_DEVICE_LUID				"NicLuid"		// windows only, passed through
 #define			JSON_DEVICE_NIC					"NicInterface"	// linux interface name, e.g. "enp5s0"
+#define			JSON_POWER_ON_AT_LOGIN			"PowerOnAtLogin"	// linux only
 
 Preferences::Preferences(std::string configuration_file_name)
 {
@@ -148,6 +149,10 @@ Preferences::Preferences(std::string configuration_file_name)
 				j = jsonPrefs[JSON_PREFS_NODE][JSON_UPDATER_MODE];
 				if (!j.empty() && j.is_number())
 					updater_mode_ = j.get<int>();
+				// Power on at login (linux only)
+				j = jsonPrefs[JSON_PREFS_NODE][JSON_POWER_ON_AT_LOGIN];
+				if (!j.empty() && j.is_boolean())
+					power_on_at_login_ = j.get<bool>();
 				// User idle mode
 				j = jsonPrefs[JSON_PREFS_NODE][JSON_IDLEBLANK];
 				if (!j.empty() && j.is_boolean())
@@ -493,6 +498,7 @@ bool Preferences::writeToDisk(void)
 	prefs[JSON_PREFS_NODE][JSON_PWRONTIMEOUT] = (int)power_on_timeout_;
 	prefs[JSON_PREFS_NODE][JSON_LOG_LEVEL] = (int)log_level_;
 	prefs[JSON_PREFS_NODE][JSON_UPDATER_MODE] = (int)updater_mode_;
+	prefs[JSON_PREFS_NODE][JSON_POWER_ON_AT_LOGIN] = (bool)power_on_at_login_;
 	prefs[JSON_PREFS_NODE][JSON_IDLEBLANK] = (bool)user_idle_mode_;
 	prefs[JSON_PREFS_NODE][JSON_IDLEBLANKDELAY] = (int)user_idle_mode_delay_;
 	prefs[JSON_PREFS_NODE][JSON_ADHERETOPOLOGY] = (bool)topology_support_;

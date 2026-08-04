@@ -113,6 +113,11 @@ int main(int argc, char* argv[])
 		case PowerEvent::Resume:
 			companion.systemEvent(EVENT_SHUTDOWN_TYPE_UNDEFINED);
 			companion.systemEvent(EVENT_SYSTEM_RESUME);
+			// On windows the console display-state notification fires on resume
+			// and is what actually powers the TV back on. logind has no
+			// equivalent signal, so synthesise it: without this the display is
+			// switched off on suspend and never comes back.
+			companion.systemEvent(EVENT_SYSTEM_DISPLAYON);
 			break;
 		case PowerEvent::Shutdown:
 			// Tell the engine which kind of shutdown first; upstream derived
@@ -163,6 +168,14 @@ int main(int argc, char* argv[])
 	std::signal(SIGTERM, onSignal);
 
 	companion.systemEvent(EVENT_SYSTEM_BOOT);
+
+	// EVENT_SYSTEM_BOOT only records a timestamp; the engine tracks whether the
+	// displays are on via the display-state events, and that flag starts false.
+	// Left alone, the first suspend after login would decide the display was
+	// already off and skip powering the TV down. Declaring the display on at
+	// startup fixes that, and powers the TV on at login.
+	if (prefs.power_on_at_login_)
+		companion.systemEvent(EVENT_SYSTEM_DISPLAYON);
 
 	sd_notify(0, "READY=1\nSTATUS=Watching for power events");
 	note("daemon ready");

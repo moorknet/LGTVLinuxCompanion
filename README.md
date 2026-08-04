@@ -45,6 +45,13 @@ behind `#ifdef` guards.
   newline delimited UTF-8 rather than UTF-16.
 - **XDG paths**: `~/.config/lgtv-companion/config.json`,
   `~/.local/state/lgtv-companion/log.txt`.
+- **The user interface owns the service.** Ticking "Automatically manage this
+  device" and clicking Apply installs and enables a `systemd --user` unit, after
+  telling you exactly what it will do. The Windows build installed its service
+  from the MSI instead. No administrator rights are needed.
+- **`PowerOnAtLogin`** (new, Linux only, default true) powers the display on when
+  the service starts. Windows got this implicitly from the console display-state
+  notification, which has no logind equivalent.
 - The `config.json` schema is unchanged and round-trips with the Windows build.
 - **Not carried over:** the ARP-override wake-on-LAN fallback (needs
   `CAP_NET_ADMIN`), fullscreen detection (no portable Wayland API), and the

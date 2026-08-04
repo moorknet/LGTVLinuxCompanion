@@ -7,6 +7,7 @@
 #include "main_window.h"
 #include "device_dialog.h"
 #include "options_dialog.h"
+#include "service_manager.h"
 #include "app_define.h"
 #include "ipc.h"
 #include "paths.h"
@@ -33,6 +34,7 @@ MainWindow::MainWindow(QWidget* parent)
 	setWindowTitle(APPNAME);
 	buildUi();
 	reloadDevices();
+	updateServiceStatus();
 
 	if (!prefs_.isInitialised())
 	{
@@ -76,6 +78,22 @@ void MainWindow::buildUi(void)
 	enable_check_ = new QCheckBox(tr("Automatically manage this device"), central);
 	enable_check_->setEnabled(false);
 	outer->addWidget(enable_check_);
+
+	// Spell out what ticking the box actually causes, rather than leaving the
+	// user to infer it.
+	manage_hint_ = new QLabel(central);
+	manage_hint_->setText(tr(
+		"Runs a background service that powers the TV off when this PC shuts "
+		"down or suspends, and back on when it starts up or resumes."));
+	manage_hint_->setWordWrap(true);
+	manage_hint_->setEnabled(false);
+	manage_hint_->setContentsMargins(22, 0, 0, 0);
+	outer->addWidget(manage_hint_);
+
+	service_status_ = new QLabel(central);
+	service_status_->setWordWrap(true);
+	service_status_->setContentsMargins(22, 0, 0, 0);
+	outer->addWidget(service_status_);
 
 	outer->addStretch(1);
 
@@ -243,20 +261,104 @@ void MainWindow::onApply(void)
 		return;
 	}
 	setDirty(false);
-	restartDaemon();
+	syncService();
+	updateServiceStatus();
+}
+void MainWindow::syncService(void)
+{
+	// Does the user want anything managed automatically?
+	bool wants_management = false;
+	for (const auto& device : prefs_.devices_)
+		if (device.enabled)
+			wants_management = true;
+
+	if (wants_management && !service::isEnabled())
+	{
+		// Enabling a background service that starts at every login is not
+		// something to do silently. Say exactly what it will do first.
+		auto answer = QMessageBox::question(this,
+			tr("Enable automatic management?"),
+			tr("<p>To manage your display automatically, a background service "
+				"must run in your desktop session.</p>"
+				"<p><b>This will:</b></p>"
+				"<ul>"
+				"<li>Install a systemd user service (<code>%1</code>) that "
+				"starts automatically every time you log in</li>"
+				"<li><b>Power the TV off</b> when this PC shuts down or suspends</li>"
+				"<li><b>Power the TV on</b> when this PC starts up or resumes</li>"
+				"</ul>"
+				"<p>No administrator rights are needed, and nothing is installed "
+				"system-wide. You can turn this off again at any time by "
+				"unticking &quot;Automatically manage this device&quot;.</p>"
+				"<p>Enable it now?</p>")
+			.arg(service::unitName()),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+
+		if (answer != QMessageBox::Yes)
+			return;
+
+		QString error;
+		if (!service::install(error))
+		{
+			QMessageBox::critical(this, tr("Could not enable the service"), error);
+			return;
+		}
+		QMessageBox::information(this, tr("Automatic management enabled"),
+			tr("The service is running and will start automatically at login."));
+		return;
+	}
+
+	if (!wants_management && service::isEnabled())
+	{
+		auto answer = QMessageBox::question(this,
+			tr("Disable automatic management?"),
+			tr("<p>No device is set to be managed automatically.</p>"
+				"<p>Stop the background service and prevent it from starting at "
+				"login? Your display will no longer be powered off when this PC "
+				"shuts down or suspends.</p>"),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+
+		if (answer != QMessageBox::Yes)
+			return;
+
+		QString error;
+		if (!service::disable(error))
+			QMessageBox::critical(this, tr("Could not disable the service"), error);
+		return;
+	}
+
+	// Already in the desired state; just let a running service reload.
+	service::tryRestart();
+}
+void MainWindow::updateServiceStatus(void)
+{
+	if (!service_status_)
+		return;
+
+	if (service::isEnabled())
+	{
+		service_status_->setText(service::isActive()
+			? tr("✓ Background service is running and starts at login.")
+			: tr("⚠ Background service is enabled but not currently running."));
+	}
+	else if (service::daemonPath().isEmpty())
+	{
+		service_status_->setText(
+			tr("⚠ The daemon executable was not found; automatic management "
+				"cannot be enabled."));
+	}
+	else
+	{
+		service_status_->setText(
+			tr("Background service is not enabled. Tick the box above and click "
+				"Apply to enable it."));
+	}
+	service_status_->setEnabled(false);
 }
 void MainWindow::notifyDaemon(const std::string& command)
 {
 	// Best effort: the daemon may not be running, which is not an error.
 	IpcClient::sendOneShot(paths::ipcSocket(), command, nullptr, 1000);
-}
-void MainWindow::restartDaemon(void)
-{
-	// The daemon reads its configuration once at startup, so applying changes
-	// means restarting it. Upstream relaunched the windows service; here systemd
-	// owns the lifecycle. Silently does nothing if the unit is not installed.
-	QProcess::startDetached("systemctl",
-		{ "--user", "try-restart", "lgtv-companion.service" });
 }
 void MainWindow::closeEvent(QCloseEvent* event)
 {

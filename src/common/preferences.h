@@ -45,6 +45,10 @@ public:
 	int									version_loaded_ = 0;
 	int									power_on_timeout_ = 40;
 	int									updater_mode_ = PREFS_UPDATER_OFF;
+	// Linux only: power the display on when the daemon starts, i.e. at login.
+	// Also marks the display as on, which the engine needs before it will power
+	// anything down on the first suspend. Unknown to the windows build.
+	bool								power_on_at_login_ = true;
 	bool								user_idle_mode_ = false;
 	int									user_idle_mode_delay_ = 10;
 	bool								user_idle_mode_mute_speakers_ = false;

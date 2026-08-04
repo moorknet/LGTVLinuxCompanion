@@ -41,8 +41,10 @@ private slots:
 
 private:
 	void buildUi(void);
-	// Restart the systemd user service so it re-reads the configuration.
-	void restartDaemon(void);
+	// Bring the systemd user service into line with whether any device is set
+	// to be managed automatically, asking the user before enabling it.
+	void syncService(void);
+	void updateServiceStatus(void);
 	void reloadDevices(void);
 	void setDirty(bool dirty);
 	// Ask the daemon to re-read its configuration after Apply. Replaces the
@@ -58,4 +60,6 @@ private:
 	QPushButton* settings_button_ = nullptr;
 	QPushButton* apply_button_ = nullptr;
 	QLabel* donate_label_ = nullptr;
+	QLabel* manage_hint_ = nullptr;
+	QLabel* service_status_ = nullptr;
 };
