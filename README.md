@@ -14,8 +14,9 @@ pixel wear.
 
 ## Status
 
-**Work in progress.** The portable core is ported and tested; the daemon, CLI and
-Qt user interface are still being built.
+**Usable.** The daemon and command line tool are complete and verified against
+real hardware. The user interface covers device and global configuration; a few
+secondary dialogs are still missing.
 
 | Component | State |
 |---|---|

@@ -136,8 +136,14 @@ target_link_libraries(lgtv-companion-daemon PRIVATE lgtv-platform)
 target_compile_options(lgtv-companion-daemon PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 install(TARGETS lgtv-companion-daemon RUNTIME DESTINATION bin)
-install(FILES data/lgtv-companion.service
-    DESTINATION lib/systemd/user)
+
+# The unit must point at wherever the daemon actually lands, not a hardcoded
+# /usr/bin, so that a --prefix install works.
+include(GNUInstallDirs)
+configure_file(data/lgtv-companion.service.in
+    "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion.service" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion.service"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/user")
 
 # --------------------------------------------------------------------- cli ---
 # Standalone command line tool. Talks to the TVs directly over the webOS

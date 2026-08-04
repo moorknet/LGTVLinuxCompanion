@@ -8,7 +8,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/lgtv-companion-daemon
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/lgtv-companion-daemon
 Restart=on-failure
 RestartSec=5
 
