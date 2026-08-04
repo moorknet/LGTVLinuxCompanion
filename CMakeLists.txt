@@ -138,3 +138,14 @@ target_compile_options(lgtv-companion-daemon PRIVATE -Wall -Wextra -Wno-unused-p
 install(TARGETS lgtv-companion-daemon RUNTIME DESTINATION bin)
 install(FILES data/lgtv-companion.service
     DESTINATION lib/systemd/user)
+
+# --------------------------------------------------------------------- cli ---
+# Standalone command line tool. Talks to the TVs directly over the webOS
+# websocket API rather than through the daemon.
+
+add_executable(lgtv-cli src/cli/console.cpp)
+target_link_libraries(lgtv-cli PRIVATE lgtv-common)
+target_compile_options(lgtv-cli PRIVATE -Wall -Wextra -Wno-unused-parameter)
+set_target_properties(lgtv-cli PROPERTIES OUTPUT_NAME lgtvcli)
+
+install(TARGETS lgtv-cli RUNTIME DESTINATION bin)
