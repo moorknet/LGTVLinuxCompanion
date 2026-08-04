@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(lgtv-companion
     VERSION 5.6.0
     DESCRIPTION "Control LG webOS TVs used as PC displays"
-    LANGUAGES CXX)
+    LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,6 +20,42 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Boost REQUIRED)
 find_package(nlohmann_json 3.9 REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
+pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client)
+
+# ext-idle-notify-v1 is a staging protocol; generate its glue with
+# wayland-scanner rather than depending on a system-provided binding.
+pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+
+set(IDLE_PROTOCOL_XML
+    "${WAYLAND_PROTOCOLS_DIR}/staging/ext-idle-notify/ext-idle-notify-v1.xml")
+if(NOT EXISTS "${IDLE_PROTOCOL_XML}")
+    message(FATAL_ERROR
+        "ext-idle-notify-v1.xml not found at ${IDLE_PROTOCOL_XML}. "
+        "Install a newer wayland-protocols.")
+endif()
+
+set(IDLE_PROTOCOL_DIR "${CMAKE_CURRENT_BINARY_DIR}/wayland-protocols")
+file(MAKE_DIRECTORY "${IDLE_PROTOCOL_DIR}")
+
+add_custom_command(
+    OUTPUT "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-client-protocol.h"
+    COMMAND ${WAYLAND_SCANNER} client-header
+            "${IDLE_PROTOCOL_XML}"
+            "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-client-protocol.h"
+    DEPENDS "${IDLE_PROTOCOL_XML}"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-protocol.c"
+    COMMAND ${WAYLAND_SCANNER} private-code
+            "${IDLE_PROTOCOL_XML}"
+            "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-protocol.c"
+    DEPENDS "${IDLE_PROTOCOL_XML}"
+    VERBATIM)
 
 # ------------------------------------------------------------- lgtv-common ---
 # Portable core: device model, webOS JSON api, config, logging, local IPC.
@@ -59,3 +95,30 @@ enable_testing()
 add_executable(lgtv-smoketest src/common/smoke_test.cpp)
 target_link_libraries(lgtv-smoketest PRIVATE lgtv-common)
 add_test(NAME smoketest COMMAND lgtv-smoketest)
+
+# ------------------------------------------------------- platform monitors ---
+# logind power events and Wayland idle detection.
+
+add_library(lgtv-platform STATIC
+    src/daemon/logind.cpp
+    src/daemon/idle_monitor.cpp
+    "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-protocol.c"
+    "${IDLE_PROTOCOL_DIR}/ext-idle-notify-v1-client-protocol.h"
+)
+
+target_include_directories(lgtv-platform PUBLIC
+    src/daemon
+    "${IDLE_PROTOCOL_DIR}"
+)
+
+target_link_libraries(lgtv-platform PUBLIC
+    lgtv-common
+    PkgConfig::SYSTEMD
+    PkgConfig::WAYLAND
+)
+
+target_compile_options(lgtv-platform PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+# Interactive harness: prints logind and idle events as they arrive.
+add_executable(lgtv-platform-probe src/daemon/platform_probe.cpp)
+target_link_libraries(lgtv-platform-probe PRIVATE lgtv-platform)
