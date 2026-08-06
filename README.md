@@ -86,6 +86,19 @@ Run the tests:
 ctest --test-dir build --output-on-failure
 ```
 
+## Tuning the shutdown window
+
+logind gives a delay inhibitor `InhibitDelayMaxSec` (5 seconds by default) to
+finish work before the system suspends or powers off. The daemon holds that
+lock until the TV has actually acknowledged the power-off. If your display is
+slow to answer and the log shows *"still busy ..., letting the system
+proceed"*, raise it:
+
+```
+# /etc/systemd/logind.conf
+InhibitDelayMaxSec=15
+```
+
 ## Prerequisites on the TV
 
 Unchanged from upstream, and still essential:

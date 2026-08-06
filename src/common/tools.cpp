@@ -6,7 +6,9 @@
 
 #include "tools.h"
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <thread>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -285,6 +287,20 @@ std::string tools::getIPforInterface(const std::string& interface_name)
 		return false;
 		});
 	return result;
+}
+bool tools::waitForNetwork(const std::string& destination_ip, int timeout_ms)
+{
+	// getSourceIPforDestination performs a UDP connect(), which fails with
+	// ENETUNREACH while the interface is still coming up and starts succeeding
+	// the moment a route exists. No packet is sent.
+	const int interval_ms = 250;
+	for (int waited = 0; waited < timeout_ms; waited += interval_ms)
+	{
+		if (!getSourceIPforDestination(destination_ip).empty())
+			return true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+	}
+	return !getSourceIPforDestination(destination_ip).empty();
 }
 std::string tools::getBroadcastForIP(const std::string& ip)
 {

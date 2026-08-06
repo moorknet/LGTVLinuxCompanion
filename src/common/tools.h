@@ -32,6 +32,11 @@ namespace tools
 	std::string								getInterfaceForIP(const std::string& ip);
 	// IPv4 address of the named interface, e.g. "enp5s0" -> "192.168.1.9", or "".
 	std::string								getIPforInterface(const std::string& interface_name);
+	// Block until a route to the given address exists, or the timeout elapses.
+	// Returns true if the network became usable. Needed on resume: logind
+	// reports the wakeup before the interface is back, and every packet sent
+	// before that fails with ENETUNREACH.
+	bool									waitForNetwork(const std::string& destination_ip, int timeout_ms);
 	// Broadcast address of the interface owning the given local address, or "".
 	std::string								getBroadcastForIP(const std::string& ip);
 }

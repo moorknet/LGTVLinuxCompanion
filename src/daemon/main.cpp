@@ -14,6 +14,7 @@
 #include "app_define.h"
 #include "paths.h"
 #include "preferences.h"
+#include "tools.h"
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -101,16 +102,48 @@ int main(int argc, char* argv[])
 
 	Companion companion(prefs);
 
-	// Power events. The handler runs while logind holds our delay inhibitor, so
-	// the TV is told to power off before the system actually goes down.
-	LogindMonitor power([&companion, &note](PowerEvent event) {
-		note("power event: " + toString(event));
-		switch (event)
-		{
-		case PowerEvent::Suspend:
-			companion.systemEvent(EVENT_SYSTEM_SUSPEND);
-			break;
-		case PowerEvent::Resume:
+	// logind's delay budget, filled in once the monitor is up. Handlers must
+	// finish inside it or the system proceeds regardless.
+	std::atomic<unsigned> inhibit_budget_ms{ 5000 };
+
+	// systemEvent() only enqueues work; it does not wait for the TV to answer.
+	// On the way down we must hold the inhibitor until that work drains, or the
+	// system suspends mid-connection and the display is never switched off.
+	auto drain = [&companion, &inhibit_budget_ms, &note](const char* what) {
+		// Leave a margin so we release the lock before logind stops waiting.
+		const unsigned budget = inhibit_budget_ms > 800 ? inhibit_budget_ms - 500 : 500;
+		const auto deadline = std::chrono::steady_clock::now()
+			+ std::chrono::milliseconds(budget);
+
+		// The work is queued asynchronously; give it a moment to become busy.
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		while (companion.isBusy() && std::chrono::steady_clock::now() < deadline)
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+		if (companion.isBusy())
+			note(std::string(what) + ": still busy after "
+				+ std::to_string(budget) + "ms, letting the system proceed");
+		else
+			note(std::string(what) + ": finished");
+		};
+
+	// Resume needs the opposite treatment. logind announces the wakeup before
+	// the network interface is back, so anything sent immediately fails with
+	// ENETUNREACH. Wait for a route first, off the bus thread.
+	std::string probe_ip;
+	for (const auto& device : prefs.devices_)
+		if (device.enabled && !device.ip.empty() && probe_ip.empty())
+			probe_ip = device.ip;
+
+	auto onResume = [&companion, &note, probe_ip] {
+		std::thread([&companion, &note, probe_ip] {
+			if (!probe_ip.empty())
+			{
+				if (tools::waitForNetwork(probe_ip, 30000))
+					note("network is up again");
+				else
+					note("network did not come back within 30s; trying anyway");
+			}
 			companion.systemEvent(EVENT_SHUTDOWN_TYPE_UNDEFINED);
 			companion.systemEvent(EVENT_SYSTEM_RESUME);
 			// On windows the console display-state notification fires on resume
@@ -118,20 +151,38 @@ int main(int argc, char* argv[])
 			// equivalent signal, so synthesise it: without this the display is
 			// switched off on suspend and never comes back.
 			companion.systemEvent(EVENT_SYSTEM_DISPLAYON);
+			}).detach();
+		};
+
+	// Power events. The "going down" handlers run while logind holds our delay
+	// inhibitor, so the TV is told to power off before the system goes down.
+	LogindMonitor power([&companion, &note, &drain, &onResume](PowerEvent event) {
+		note("power event: " + toString(event));
+		switch (event)
+		{
+		case PowerEvent::Suspend:
+			companion.systemEvent(EVENT_SYSTEM_SUSPEND);
+			drain("suspend power-off");
+			break;
+		case PowerEvent::Resume:
+			onResume();
 			break;
 		case PowerEvent::Shutdown:
 			// Tell the engine which kind of shutdown first; upstream derived
 			// this from the windows event log, logind reports it outright.
 			companion.systemEvent(EVENT_SHUTDOWN_TYPE_SHUTDOWN);
 			companion.systemEvent(EVENT_SYSTEM_SHUTDOWN);
+			drain("shutdown power-off");
 			break;
 		case PowerEvent::Reboot:
 			companion.systemEvent(EVENT_SHUTDOWN_TYPE_REBOOT);
 			companion.systemEvent(EVENT_SYSTEM_REBOOT);
+			drain("reboot");
 			break;
 		case PowerEvent::ShutdownUnsure:
 			companion.systemEvent(EVENT_SHUTDOWN_TYPE_UNSURE);
 			companion.systemEvent(EVENT_SYSTEM_SHUTDOWN);
+			drain("shutdown power-off");
 			break;
 		case PowerEvent::Lock:
 		case PowerEvent::Unlock:
@@ -143,8 +194,11 @@ int main(int argc, char* argv[])
 		std::cerr << "Warning: logind unavailable (" << power.lastError()
 		<< "). Power events will not be handled.\n";
 	else
+	{
+		inhibit_budget_ms = power.inhibitDelayMs();
 		note("logind connected; inhibit budget "
 			+ std::to_string(power.inhibitDelayMs()) + "ms");
+	}
 
 	// Idle detection is optional and only armed when the user enabled it.
 	std::unique_ptr<IdleMonitor> idle;
@@ -175,7 +229,13 @@ int main(int argc, char* argv[])
 	// already off and skip powering the TV down. Declaring the display on at
 	// startup fixes that, and powers the TV on at login.
 	if (prefs.power_on_at_login_)
+	{
+		// As a system service this can start before the network is up, exactly
+		// like the resume case.
+		if (!probe_ip.empty() && !tools::waitForNetwork(probe_ip, 30000))
+			note("network not ready at startup; trying anyway");
 		companion.systemEvent(EVENT_SYSTEM_DISPLAYON);
+	}
 
 	sd_notify(0, "READY=1\nSTATUS=Watching for power events");
 	note("daemon ready");
