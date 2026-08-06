@@ -1,0 +1,21 @@
+[Unit]
+Description=LGTV Linux Companion idle helper
+Documentation=https://github.com/moorknet/LGTVLinuxCompanion
+# User scope, deliberately: idle detection needs a Wayland connection, which
+# only exists inside a graphical session. The daemon this talks to is a system
+# service, because that half must run before login and survive until shutdown.
+After=graphical-session.target
+PartOf=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=simple
+ExecStart=@LGTV_BINDIR@/lgtv-companion-idle
+Restart=on-failure
+RestartSec=5
+# Exits 0 when idle mode is switched off in the configuration; that is not a
+# failure and should not be retried.
+SuccessExitStatus=0
+
+[Install]
+WantedBy=graphical-session.target

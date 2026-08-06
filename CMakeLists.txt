@@ -155,6 +155,21 @@ configure_file(data/lgtv-companion-system.service.in
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion@.service"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/system")
 
+# ------------------------------------------------------------- idle helper ---
+# User-scope counterpart to the system service: idle detection needs Wayland,
+# which only exists inside a graphical session.
+
+add_executable(lgtv-companion-idle src/idle/main.cpp)
+target_link_libraries(lgtv-companion-idle PRIVATE lgtv-platform)
+target_compile_options(lgtv-companion-idle PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+install(TARGETS lgtv-companion-idle RUNTIME DESTINATION bin)
+
+configure_file(data/lgtv-companion-idle.service.in
+    "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion-idle.service" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion-idle.service"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/user")
+
 # --------------------------------------------------------------------- cli ---
 # Standalone command line tool. Talks to the TVs directly over the webOS
 # websocket API rather than through the daemon.

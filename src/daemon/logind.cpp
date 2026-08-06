@@ -71,7 +71,9 @@ std::string currentSessionId(void)
 	if (const char* id = std::getenv("XDG_SESSION_ID"))
 		if (id[0] != '\0')
 			return id;
-	return "1";
+	// System scope has no session. Empty means "do not filter by session": the
+	// control socket is already restricted to the owning user.
+	return "";
 }
 
 class LogindMonitor::Impl

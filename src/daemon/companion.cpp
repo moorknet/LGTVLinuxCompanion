@@ -792,7 +792,11 @@ void Companion::Impl::ipcCallback(std::string message, bool recursive)
 				INFO_(daemon_number, "A new version of this app is available for download here: %1%", NEWRELEASELINK);
 				continue;
 			}
-			if (physical_console != daemon_id) // only allow process communications from physical console
+			// Upstream restricted this to the physical console session. In
+			// system scope there is no session to compare against, and the
+			// socket is already owned by and readable only to the configured
+			// user, so an empty id means "accept".
+			if (!physical_console.empty() && physical_console != daemon_id)
 			{
 				DEBUG_("IPC", "Discarding messages from session: %1%", daemon_id);
 				continue;
