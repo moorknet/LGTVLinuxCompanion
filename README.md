@@ -35,8 +35,12 @@ This is a Linux-only fork; the Windows code has been removed rather than kept
 behind `#ifdef` guards.
 
 - **Wayland only.** X11 is out of scope.
-- **One `systemd --user` service** replaces the Windows SYSTEM service plus
-  per-user desktop daemon. No root is required to install or run it.
+- **A systemd *system* service**, mirroring the Windows SYSTEM service. It runs
+  as your own user account rather than root, but it must be system scope: a
+  `--user` unit does not exist until someone logs in, so the display would still
+  be off at the login screen, and it is torn down with the graphical session
+  before logind broadcasts `PrepareForShutdown`, so the display would never be
+  switched off. Installing it asks for authentication once, via polkit.
 - **logind over D-Bus** replaces the Windows service control handler for suspend,
   resume and shutdown notification. A side benefit: logind reports shutdown versus
   reboot directly, so the original's localised event-log word dictionary — which
@@ -44,7 +48,9 @@ behind `#ifdef` guards.
 - **Unix domain socket** replaces the Windows named pipe for IPC; messages are
   newline delimited UTF-8 rather than UTF-16.
 - **XDG paths**: `~/.config/lgtv-companion/config.json`,
-  `~/.local/state/lgtv-companion/log.txt`.
+  `~/.local/state/lgtv-companion/log.txt`. The control socket is
+  `/run/lgtv-companion/ipc.sock` under the system service, falling back to
+  `$XDG_RUNTIME_DIR` when the daemon is run by hand.
 - **The user interface owns the service.** Ticking "Automatically manage this
   device" and clicking Apply installs and enables a `systemd --user` unit, after
   telling you exactly what it will do. The Windows build installed its service

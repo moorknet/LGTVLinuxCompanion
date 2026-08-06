@@ -5,28 +5,56 @@
 // for the full license text, which must accompany all copies.
 
 #include "service_manager.h"
+#include "app_define.h"
+#include "paths.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QTextStream>
+#include <unistd.h>
 
 namespace
 {
 	constexpr const char* UNIT_NAME = "lgtv-companion.service";
 	constexpr const char* DAEMON_NAME = "lgtv-companion-daemon";
+	constexpr const char* SYSTEM_UNIT_DIR = "/etc/systemd/system";
 
-	// Run systemctl --user and return its exit code, or -1 if it never ran.
+	// systemctl in system scope. Read-only queries need no privileges.
 	int systemctl(const QStringList& arguments, QString* output = nullptr)
 	{
 		QProcess process;
-		process.start("systemctl", QStringList{ "--user" } + arguments);
+		process.start("systemctl", arguments);
 		if (!process.waitForFinished(10000))
 			return -1;
 		if (output)
 			*output = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+		return process.exitCode();
+	}
+
+	// Privileged step, via polkit. The user authenticates in pkexec's own
+	// dialog; nothing here ever handles their password.
+	int pkexec(const QStringList& arguments, QString* error = nullptr)
+	{
+		QProcess process;
+		process.start("pkexec", arguments);
+		if (!process.waitForFinished(120000))
+		{
+			if (error)
+				*error = QObject::tr("Timed out waiting for authorisation.");
+			return -1;
+		}
+		if (error && process.exitCode() != 0)
+		{
+			QString text = QString::fromUtf8(process.readAllStandardError()).trimmed();
+			// 126/127 are pkexec's own "dismissed" and "not authorised".
+			*error = text.isEmpty()
+				? QObject::tr("Authorisation was declined or failed.")
+				: text;
+		}
 		return process.exitCode();
 	}
 }
@@ -37,8 +65,7 @@ QString service::unitName(void)
 }
 QString service::unitPath(void)
 {
-	QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-	return base + "/systemd/user/" + UNIT_NAME;
+	return QString("%1/%2").arg(SYSTEM_UNIT_DIR, UNIT_NAME);
 }
 QString service::daemonPath(void)
 {
@@ -47,14 +74,12 @@ QString service::daemonPath(void)
 	if (QFileInfo(sibling).isExecutable())
 		return QFileInfo(sibling).absoluteFilePath();
 
-	QString found = QStandardPaths::findExecutable(DAEMON_NAME);
-	return found;
+	return QStandardPaths::findExecutable(DAEMON_NAME);
 }
 bool service::isInstalled(void)
 {
 	if (QFile::exists(unitPath()))
 		return true;
-	// A distribution package may have put it in a system unit directory.
 	QString state;
 	return systemctl({ "cat", UNIT_NAME }, &state) == 0;
 }
@@ -82,65 +107,81 @@ bool service::install(QString& error)
 		return false;
 	}
 
-	QString path = unitPath();
-	if (!QDir().mkpath(QFileInfo(path).absolutePath()))
+	QString user = qEnvironmentVariable("USER");
+	if (user.isEmpty())
+		user = QString::fromLocal8Bit(qgetenv("LOGNAME"));
+	if (user.isEmpty())
 	{
-		error = QObject::tr("Could not create %1").arg(QFileInfo(path).absolutePath());
+		error = QObject::tr("Could not determine the current user name.");
 		return false;
 	}
 
-	QFile file(path);
-	if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+	// Compose the unit in a temporary file, then move it into place as root.
+	QTemporaryFile staged;
+	staged.setAutoRemove(true);
+	if (!staged.open())
 	{
-		error = QObject::tr("Could not write %1: %2").arg(path, file.errorString());
+		error = QObject::tr("Could not create a temporary file.");
 		return false;
 	}
 
-	QTextStream unit(&file);
+	QTextStream unit(&staged);
 	unit << "# Written by LGTV Linux Companion. Edits will be overwritten.\n"
 		<< "[Unit]\n"
 		<< "Description=LGTV Linux Companion\n"
 		<< "Documentation=https://github.com/moorknet/LGTVLinuxCompanion\n"
-		<< "After=graphical-session.target network-online.target\n"
-		<< "PartOf=graphical-session.target\n"
+		// System scope on purpose: a --user unit does not exist until login, so
+		// the display would still be off at the login screen, and it is torn
+		// down with the graphical session before logind broadcasts
+		// PrepareForShutdown, so the display would never be switched off.
+		<< "After=network-online.target\n"
+		<< "Wants=network-online.target\n"
 		<< "\n"
 		<< "[Service]\n"
 		<< "Type=notify\n"
+		<< "User=" << user << "\n"
 		<< "ExecStart=" << daemon << "\n"
 		<< "Restart=on-failure\n"
 		<< "RestartSec=5\n"
-		// The display must be told to power off before the system goes down;
-		// logind grants us InhibitDelayMaxSec to do it.
 		<< "TimeoutStopSec=20\n"
+		// No XDG_RUNTIME_DIR in system scope; the control socket goes here.
+		<< "RuntimeDirectory=" << APP_ID << "\n"
+		<< "RuntimeDirectoryMode=0755\n"
 		<< "NoNewPrivileges=true\n"
+		<< "ProtectSystem=strict\n"
+		<< "ProtectHome=read-only\n"
 		<< "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\n"
+		// The pairing key is written back to the config file, and the log lives
+		// under the user's state directory.
+		<< "ReadWritePaths=" << QString::fromStdString(paths::configDir())
+		<< " " << QString::fromStdString(paths::stateDir()) << "\n"
 		<< "\n"
 		<< "[Install]\n"
-		<< "WantedBy=graphical-session.target\n";
-	file.close();
+		<< "WantedBy=multi-user.target\n";
+	unit.flush();
+	staged.close();
 
-	if (systemctl({ "daemon-reload" }) != 0)
-	{
-		error = QObject::tr("systemctl --user daemon-reload failed.");
+	// One privileged invocation for the whole job, so the user is prompted once.
+	QString script = QString(
+		"install -m 0644 '%1' '%2' && "
+		"systemctl daemon-reload && "
+		"systemctl enable --now %3")
+		.arg(staged.fileName(), unitPath(), UNIT_NAME);
+
+	if (pkexec({ "/bin/sh", "-c", script }, &error) != 0)
 		return false;
-	}
-	if (systemctl({ "enable", "--now", UNIT_NAME }) != 0)
-	{
-		error = QObject::tr("systemctl --user enable --now %1 failed.").arg(UNIT_NAME);
-		return false;
-	}
+
 	return true;
 }
 bool service::disable(QString& error)
 {
-	if (systemctl({ "disable", "--now", UNIT_NAME }) != 0)
-	{
-		error = QObject::tr("systemctl --user disable --now %1 failed.").arg(UNIT_NAME);
+	if (pkexec({ "/bin/sh", "-c",
+		QString("systemctl disable --now %1").arg(UNIT_NAME) }, &error) != 0)
 		return false;
-	}
 	return true;
 }
 void service::tryRestart(void)
 {
-	systemctl({ "try-restart", UNIT_NAME });
+	pkexec({ "/bin/sh", "-c",
+		QString("systemctl try-restart %1").arg(UNIT_NAME) });
 }

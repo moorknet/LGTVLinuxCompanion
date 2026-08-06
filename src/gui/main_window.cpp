@@ -83,8 +83,8 @@ void MainWindow::buildUi(void)
 	// user to infer it.
 	manage_hint_ = new QLabel(central);
 	manage_hint_->setText(tr(
-		"Runs a background service that powers the TV off when this PC shuts "
-		"down or suspends, and back on when it starts up or resumes."));
+		"Runs a system service that powers the TV on at boot, so the login "
+		"screen is visible, and off again when this PC shuts down or suspends."));
 	manage_hint_->setWordWrap(true);
 	manage_hint_->setEnabled(false);
 	manage_hint_->setContentsMargins(22, 0, 0, 0);
@@ -282,13 +282,15 @@ void MainWindow::syncService(void)
 				"must run in your desktop session.</p>"
 				"<p><b>This will:</b></p>"
 				"<ul>"
-				"<li>Install a systemd user service (<code>%1</code>) that "
-				"starts automatically every time you log in</li>"
+				"<li>Install a system service (<code>%1</code>) that starts at "
+				"boot, before anyone logs in</li>"
+				"<li><b>Power the TV on</b> at boot, so the login screen is "
+				"visible, and again when this PC resumes</li>"
 				"<li><b>Power the TV off</b> when this PC shuts down or suspends</li>"
-				"<li><b>Power the TV on</b> when this PC starts up or resumes</li>"
 				"</ul>"
-				"<p>No administrator rights are needed, and nothing is installed "
-				"system-wide. You can turn this off again at any time by "
+				"<p>The service runs as your own user account, not as root. "
+				"Installing it needs administrator rights, so you will be asked "
+				"to authenticate once. You can turn it off again at any time by "
 				"unticking &quot;Automatically manage this device&quot;.</p>"
 				"<p>Enable it now?</p>")
 			.arg(service::unitName()),
@@ -304,7 +306,7 @@ void MainWindow::syncService(void)
 			return;
 		}
 		QMessageBox::information(this, tr("Automatic management enabled"),
-			tr("The service is running and will start automatically at login."));
+			tr("The service is running and will start automatically at boot."));
 		return;
 	}
 
@@ -338,8 +340,8 @@ void MainWindow::updateServiceStatus(void)
 	if (service::isEnabled())
 	{
 		service_status_->setText(service::isActive()
-			? tr("✓ Background service is running and starts at login.")
-			: tr("⚠ Background service is enabled but not currently running."));
+			? tr("✓ System service is running and starts at boot.")
+			: tr("⚠ System service is enabled but not currently running."));
 	}
 	else if (service::daemonPath().isEmpty())
 	{
@@ -350,7 +352,7 @@ void MainWindow::updateServiceStatus(void)
 	else
 	{
 		service_status_->setText(
-			tr("Background service is not enabled. Tick the box above and click "
+			tr("System service is not enabled. Tick the box above and click "
 				"Apply to enable it."));
 	}
 	service_status_->setEnabled(false);

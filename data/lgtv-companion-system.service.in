@@ -1,0 +1,47 @@
+[Unit]
+Description=LGTV Linux Companion
+Documentation=https://github.com/moorknet/LGTVLinuxCompanion
+# System scope, deliberately. A --user service does not exist until someone
+# logs in, so the display would still be off at the login screen, and it is
+# torn down with the graphical session before logind ever broadcasts
+# PrepareForShutdown, so the display would never be switched off.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Runs as the desktop user, not root: it only needs that user's configuration
+# and a network socket. Substituted at install time.
+User=@LGTV_USER@
+ExecStart=@LGTV_BINDIR@/lgtv-companion-daemon
+Restart=on-failure
+RestartSec=5
+
+# The display must be told to power off before the system goes down. logind
+# grants InhibitDelayMaxSec (5s by default) for that; leave room for it.
+TimeoutStopSec=20
+
+# /run/lgtv-companion, owned by the user above. There is no XDG_RUNTIME_DIR in
+# system scope, so this is where the control socket goes.
+RuntimeDirectory=lgtv-companion
+RuntimeDirectoryMode=0755
+
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# The pairing key is written back into the configuration file, and the log
+# lives under the user's state directory.
+ReadWritePaths=@LGTV_CONFIG_DIR@ @LGTV_STATE_DIR@
+
+[Install]
+WantedBy=multi-user.target

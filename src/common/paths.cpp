@@ -48,6 +48,15 @@ std::string paths::stateDir(void)
 }
 std::string paths::runtimeDir(void)
 {
+	// A system-scope daemon gets RuntimeDirectory=, i.e. /run/lgtv-companion,
+	// and no XDG_RUNTIME_DIR. Clients run in a user session and do have one, so
+	// look for the system location first: when it exists the daemon is running
+	// system-wide and that is where its socket lives.
+	std::string system_dir = "/run/" + std::string(APP_ID);
+	std::error_code ec;
+	if (std::filesystem::is_directory(system_dir, ec))
+		return system_dir;
+
 	std::string base = envDir("XDG_RUNTIME_DIR");
 	if (!base.empty())
 		return base + "/" + APP_ID;
