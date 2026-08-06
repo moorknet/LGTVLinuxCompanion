@@ -189,10 +189,16 @@ bool service::install(QString& error)
 		// No XDG_RUNTIME_DIR in system scope; the control socket goes here.
 		<< "RuntimeDirectory=" << APP_ID << "\n"
 		<< "RuntimeDirectoryMode=0755\n"
+		// Lets the daemon send a wake-on-lan frame over a raw socket as soon as
+		// the link has carrier, rather than waiting for DHCP to restore an
+		// address. Saves ten seconds or more on resume; without it the daemon
+		// falls back to the UDP path.
+		<< "AmbientCapabilities=CAP_NET_RAW\n"
+		<< "CapabilityBoundingSet=CAP_NET_RAW\n"
 		<< "NoNewPrivileges=true\n"
 		<< "ProtectSystem=strict\n"
 		<< "ProtectHome=read-only\n"
-		<< "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\n"
+		<< "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_PACKET\n"
 		// The pairing key is written back to the config file, and the log lives
 		// under the user's state directory.
 		<< "ReadWritePaths=" << QString::fromStdString(paths::configDir())

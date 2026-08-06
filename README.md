@@ -86,6 +86,21 @@ Run the tests:
 ctest --test-dir build --output-on-failure
 ```
 
+## Waking quickly after resume
+
+NetworkManager withdraws the interface address on suspend and runs a fresh DHCP
+transaction on resume, which routinely takes ten seconds or more. Nothing that
+needs an IP address can happen in that window.
+
+A wake-on-LAN magic packet does not need one: it is a layer 2 frame. The daemon
+therefore sends it over a raw socket as soon as the link reports carrier, which
+happens within milliseconds, so the display starts waking while DHCP is still
+running. This needs `CAP_NET_RAW`, which the generated unit grants; without it
+the daemon logs the reason and falls back to the ordinary UDP path.
+
+If you want to shorten the DHCP wait as well, giving this machine a static
+address rather than a DHCP lease removes the transaction entirely.
+
 ## Tuning the shutdown window
 
 logind gives a delay inhibitor `InhibitDelayMaxSec` (5 seconds by default) to

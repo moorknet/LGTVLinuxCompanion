@@ -32,6 +32,27 @@ namespace tools
 	std::string								getInterfaceForIP(const std::string& ip);
 	// IPv4 address of the named interface, e.g. "enp5s0" -> "192.168.1.9", or "".
 	std::string								getIPforInterface(const std::string& interface_name);
+	// Names of interfaces that currently have carrier, i.e. a live cable or
+	// association. True long before DHCP has finished.
+	std::vector<std::string>				getInterfacesWithCarrier(void);
+	// Block until some interface has carrier, or the timeout elapses.
+	bool									waitForCarrier(int timeout_ms);
+
+	// Send a wake-on-lan magic packet as a raw ethernet frame (EtherType 0x0842)
+	// out of the named interface.
+	//
+	// Unlike the UDP path this needs no IP address, no route and no DHCP lease,
+	// so it works during the window after resume when the interface has carrier
+	// but NetworkManager has not finished reconfiguring it. That window is
+	// routinely ten seconds or more, which is dead time the display could have
+	// spent waking up.
+	//
+	// Requires CAP_NET_RAW. Returns false (setting error) when unavailable, and
+	// callers should fall back to the UDP path rather than treat it as fatal.
+	bool									sendMagicPacketRaw(const std::string& interface_name,
+												const std::string& mac,
+												std::string& error);
+
 	// Block until a route to the given address exists, or the timeout elapses.
 	// Returns true if the network became usable. Needed on resume: logind
 	// reports the wakeup before the interface is back, and every packet sent

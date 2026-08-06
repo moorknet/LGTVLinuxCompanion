@@ -9,7 +9,14 @@
 #include <chrono>
 #include <cstring>
 #include <thread>
+#include <cerrno>
+#include <filesystem>
+#include <fstream>
 #include <arpa/inet.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -287,6 +294,107 @@ std::string tools::getIPforInterface(const std::string& interface_name)
 		return false;
 		});
 	return result;
+}
+std::vector<std::string> tools::getInterfacesWithCarrier(void)
+{
+	std::vector<std::string> result;
+	std::error_code ec;
+
+	for (const auto& entry : std::filesystem::directory_iterator("/sys/class/net", ec))
+	{
+		std::string name = entry.path().filename().string();
+		if (name == "lo")
+			continue;
+
+		// carrier reads 1 once the link is up. Reading it on a down interface
+		// returns EINVAL, which shows up as a failed read.
+		std::ifstream carrier(entry.path() / "carrier");
+		std::string value;
+		if (carrier >> value && value == "1")
+			result.push_back(name);
+	}
+	return result;
+}
+bool tools::waitForCarrier(int timeout_ms)
+{
+	const int interval_ms = 100;
+	for (int waited = 0; waited < timeout_ms; waited += interval_ms)
+	{
+		if (!getInterfacesWithCarrier().empty())
+			return true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+	}
+	return !getInterfacesWithCarrier().empty();
+}
+bool tools::sendMagicPacketRaw(const std::string& interface_name,
+	const std::string& mac, std::string& error)
+{
+	// Strip the usual separators; the payload wants six raw bytes.
+	std::string hex;
+	for (char c : mac)
+		if (isxdigit(static_cast<unsigned char>(c)))
+			hex += c;
+	if (hex.length() != 12)
+	{
+		error = "malformed MAC address: " + mac;
+		return false;
+	}
+
+	unsigned char target[6];
+	for (int i = 0; i < 6; i++)
+		target[i] = static_cast<unsigned char>(std::stoul(hex.substr(i * 2, 2), nullptr, 16));
+
+	int fd = ::socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+	if (fd < 0)
+	{
+		error = std::string("raw socket unavailable (needs CAP_NET_RAW): ") + strerror(errno);
+		return false;
+	}
+
+	struct ifreq request {};
+	std::strncpy(request.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
+	if (::ioctl(fd, SIOCGIFINDEX, &request) < 0)
+	{
+		error = "no such interface: " + interface_name;
+		::close(fd);
+		return false;
+	}
+	const int index = request.ifr_ifindex;
+
+	struct ifreq hwaddr {};
+	std::strncpy(hwaddr.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
+	if (::ioctl(fd, SIOCGIFHWADDR, &hwaddr) < 0)
+	{
+		error = "cannot read the hardware address of " + interface_name;
+		::close(fd);
+		return false;
+	}
+
+	// Ethernet header, then the magic payload: 6 x 0xFF followed by the target
+	// MAC repeated 16 times.
+	unsigned char frame[14 + 102];
+	std::memset(frame, 0xFF, 6);                                  // broadcast
+	std::memcpy(frame + 6, hwaddr.ifr_hwaddr.sa_data, 6);         // our address
+	frame[12] = 0x08;                                             // EtherType
+	frame[13] = 0x42;                                             // 0x0842, WOL
+	std::memset(frame + 14, 0xFF, 6);
+	for (int i = 0; i < 16; i++)
+		std::memcpy(frame + 14 + 6 + (i * 6), target, 6);
+
+	struct sockaddr_ll destination {};
+	destination.sll_family = AF_PACKET;
+	destination.sll_protocol = htons(0x0842);
+	destination.sll_ifindex = index;
+	destination.sll_halen = 6;
+	std::memset(destination.sll_addr, 0xFF, 6);
+
+	bool ok = ::sendto(fd, frame, sizeof(frame), 0,
+		reinterpret_cast<struct sockaddr*>(&destination), sizeof(destination)) == sizeof(frame);
+	if (!ok)
+		error = std::string("sendto failed: ") + strerror(errno);
+
+	::close(fd);
+	return ok;
 }
 bool tools::waitForNetwork(const std::string& destination_ip, int timeout_ms)
 {

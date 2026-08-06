@@ -135,8 +135,36 @@ int main(int argc, char* argv[])
 		if (device.enabled && !device.ip.empty() && probe_ip.empty())
 			probe_ip = device.ip;
 
-	auto onResume = [&companion, &note, probe_ip] {
-		std::thread([&companion, &note, probe_ip] {
+	// Every enabled device's MAC, for the early raw wake below.
+	std::vector<std::string> wake_macs;
+	for (const auto& device : prefs.devices_)
+		if (device.enabled)
+			for (const auto& mac : device.mac_addresses)
+				wake_macs.push_back(mac);
+
+	auto onResume = [&companion, &note, probe_ip, wake_macs] {
+		std::thread([&companion, &note, probe_ip, wake_macs] {
+			// Carrier returns within milliseconds of the link coming back, but
+			// NetworkManager withdraws the address and runs a fresh DHCP
+			// transaction that routinely takes ten seconds or more. A magic
+			// packet is layer 2 and needs none of that, so send it raw straight
+			// away and let the display start waking during DHCP.
+			if (!wake_macs.empty() && tools::waitForCarrier(10000))
+			{
+				for (const auto& interface : tools::getInterfacesWithCarrier())
+				{
+					for (const auto& mac : wake_macs)
+					{
+						std::string error;
+						if (tools::sendMagicPacketRaw(interface, mac, error))
+							note("early wake sent on " + interface + " for " + mac);
+						else
+							note("early wake unavailable (" + error
+								+ "); falling back to the UDP path");
+					}
+				}
+			}
+
 			if (!probe_ip.empty())
 			{
 				if (tools::waitForNetwork(probe_ip, 30000))

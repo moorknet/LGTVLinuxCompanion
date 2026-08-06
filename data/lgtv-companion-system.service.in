@@ -26,6 +26,13 @@ TimeoutStopSec=20
 RuntimeDirectory=lgtv-companion
 RuntimeDirectoryMode=0755
 
+# Lets the daemon send a wake-on-lan frame over a raw socket the moment the
+# link has carrier, without waiting for DHCP to restore an address. Saves
+# ten seconds or more on resume. The daemon degrades to the UDP path if this
+# is removed.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
 NoNewPrivileges=true
 PrivateDevices=true
 ProtectSystem=strict
@@ -38,7 +45,7 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 MemoryDenyWriteExecute=true
 SystemCallArchitectures=native
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_PACKET
 # The pairing key is written back into the configuration file, and the log
 # lives under the user's state directory.
 ReadWritePaths=@LGTV_CONFIG_DIR@ @LGTV_STATE_DIR@
