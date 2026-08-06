@@ -69,12 +69,54 @@ QString service::unitPath(void)
 }
 QString service::daemonPath(void)
 {
-	// Prefer a sibling of this binary, so a build tree is self-consistent.
+	// An installed copy always wins. A system unit must not point into a build
+	// tree: that path can be moved, cleaned or rebuilt, and the service then
+	// fails to start with no obvious cause.
+	QString installed = QStandardPaths::findExecutable(DAEMON_NAME);
+	if (!installed.isEmpty() && !isDevelopmentPath(installed))
+		return installed;
+
+	for (const QString& prefix : { "/usr/local/bin", "/usr/bin", "/opt/lgtv-companion/bin" })
+	{
+		QString candidate = prefix + "/" + DAEMON_NAME;
+		if (QFileInfo(candidate).isExecutable())
+			return candidate;
+	}
+
+	// Last resort: a sibling of this binary, which is what running from a build
+	// tree gives. Callers should check isDevelopmentPath() before installing.
 	QString sibling = QCoreApplication::applicationDirPath() + "/" + DAEMON_NAME;
 	if (QFileInfo(sibling).isExecutable())
 		return QFileInfo(sibling).absoluteFilePath();
 
-	return QStandardPaths::findExecutable(DAEMON_NAME);
+	return installed;
+}
+bool service::isDevelopmentPath(const QString& path)
+{
+	if (path.isEmpty())
+		return false;
+	// Anything under a build directory, or inside the user's home, is not a
+	// stable location for a system service to reference.
+	static const QStringList markers = { "/build/", "/cmake-build", "/_build/" };
+	for (const QString& marker : markers)
+		if (path.contains(marker))
+			return true;
+
+	QString home = QDir::homePath();
+	return !home.isEmpty() && path.startsWith(home + "/");
+}
+QString service::installedUnitExecStart(void)
+{
+	QString output;
+	if (systemctl({ "show", "-p", "ExecStart", "--value", UNIT_NAME }, &output) != 0)
+		return QString();
+	// "{ path=/usr/bin/foo ; argv[]=... }"
+	int start = output.indexOf("path=");
+	if (start < 0)
+		return QString();
+	start += 5;
+	int end = output.indexOf(' ', start);
+	return output.mid(start, end < 0 ? -1 : end - start);
 }
 bool service::isInstalled(void)
 {

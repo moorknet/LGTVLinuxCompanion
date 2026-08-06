@@ -137,13 +137,23 @@ target_compile_options(lgtv-companion-daemon PRIVATE -Wall -Wextra -Wno-unused-p
 
 install(TARGETS lgtv-companion-daemon RUNTIME DESTINATION bin)
 
-# The unit must point at wherever the daemon actually lands, not a hardcoded
-# /usr/bin, so that a --prefix install works.
+# System scope, not user scope: a --user unit does not exist until login, so the
+# display would still be off at the login screen, and it is torn down with the
+# graphical session before logind broadcasts PrepareForShutdown.
+#
+# ExecStart follows the install prefix. User= is deliberately left unset here:
+# the service should run as the desktop user, which is only known at install
+# time, so the user interface generates the real unit. This copy is for
+# distribution packaging, where a drop-in supplies User=.
 include(GNUInstallDirs)
-configure_file(data/lgtv-companion.service.in
-    "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion.service" @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion.service"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/user")
+set(LGTV_BINDIR "${CMAKE_INSTALL_FULL_BINDIR}")
+set(LGTV_USER "%i")
+set(LGTV_CONFIG_DIR "%h/.config/lgtv-companion")
+set(LGTV_STATE_DIR "%h/.local/state/lgtv-companion")
+configure_file(data/lgtv-companion-system.service.in
+    "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion@.service" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lgtv-companion@.service"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/system")
 
 # --------------------------------------------------------------------- cli ---
 # Standalone command line tool. Talks to the TVs directly over the webOS

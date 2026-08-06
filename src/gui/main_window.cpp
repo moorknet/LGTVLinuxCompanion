@@ -299,6 +299,10 @@ void MainWindow::syncService(void)
 		if (answer != QMessageBox::Yes)
 			return;
 
+		if (service::isDevelopmentPath(service::daemonPath())
+			&& !confirmUnstablePath(service::daemonPath()))
+			return;
+
 		QString error;
 		if (!service::install(error))
 		{
@@ -339,9 +343,18 @@ void MainWindow::updateServiceStatus(void)
 
 	if (service::isEnabled())
 	{
-		service_status_->setText(service::isActive()
+		QString text = service::isActive()
 			? tr("✓ System service is running and starts at boot.")
-			: tr("⚠ System service is enabled but not currently running."));
+			: tr("⚠ System service is enabled but not currently running.");
+
+		// A unit installed earlier may still reference a build tree.
+		QString exec = service::installedUnitExecStart();
+		if (service::isDevelopmentPath(exec))
+			text += tr("\n⚠ It runs %1, which is a build directory. Install the "
+				"application and enable the service again to make this stable.")
+			.arg(exec);
+
+		service_status_->setText(text);
 	}
 	else if (service::daemonPath().isEmpty())
 	{
@@ -378,4 +391,17 @@ void MainWindow::closeEvent(QCloseEvent* event)
 			onApply();
 	}
 	event->accept();
+}
+bool MainWindow::confirmUnstablePath(const QString& path)
+{
+	// A system unit that points into a build tree breaks as soon as the tree is
+	// cleaned, moved or rebuilt, and the failure is obscure. Say so plainly.
+	return QMessageBox::warning(this, tr("Unstable location"),
+		tr("<p>The daemon would be run from:</p><p><code>%1</code></p>"
+			"<p>That is a build directory. The service will stop working if you "
+			"move, clean or rebuild it.</p>"
+			"<p>Install the application first, for example:</p>"
+			"<p><code>sudo cmake --install build --prefix /usr/local</code></p>"
+			"<p>Enable the service anyway?</p>").arg(path),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
 }

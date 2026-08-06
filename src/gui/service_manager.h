@@ -16,9 +16,17 @@ namespace service
 	QString unitName(void);
 	QString unitPath(void);
 
-	// Absolute path of the daemon binary: alongside this executable when running
-	// from a build tree, otherwise resolved from PATH. Empty if not found.
+	// Absolute path of the daemon binary. An installed copy is preferred; a
+	// sibling of this executable is only a last resort. Empty if not found.
 	QString daemonPath(void);
+
+	// True when the path is inside a build tree or the user's home, i.e. not a
+	// stable location for a system unit to reference.
+	bool isDevelopmentPath(const QString& path);
+
+	// ExecStart of the currently installed unit, or empty. Used to warn when a
+	// previously installed unit still points somewhere unstable.
+	QString installedUnitExecStart(void);
 
 	bool isInstalled(void);
 	bool isEnabled(void);

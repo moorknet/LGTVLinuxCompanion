@@ -45,6 +45,8 @@ private:
 	// to be managed automatically, asking the user before enabling it.
 	void syncService(void);
 	void updateServiceStatus(void);
+	// Warn when a system unit would point into a build tree.
+	bool confirmUnstablePath(const QString& path);
 	void reloadDevices(void);
 	void setDirty(bool dirty);
 	// Ask the daemon to re-read its configuration after Apply. Replaces the
